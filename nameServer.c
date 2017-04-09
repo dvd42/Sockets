@@ -191,7 +191,7 @@ void dnsEntryToByteArray(struct _DNSEntry* dnsEntry, char **next_DNSEntry_ptr)
 
 /*Dumps the dnstable into a byte array*/
 /*@Return a pointer to the byte array representing the DNS table */
-/*@param dnsTable the table to be serialized into an array of byes */
+/*@param dnsTable the table to be serialized into an array of bytes */
 /*@param _tableSize reference parameter that will be filled with the table size*/
 char *dnsTableToByteArray(struct _DNSTable* dnsTable, int *_tableSize)
 { 
@@ -206,6 +206,7 @@ char *dnsTableToByteArray(struct _DNSTable* dnsTable, int *_tableSize)
   bzero(dns_as_byteArray, tableSize);
   
   dnsEntry = dnsTable->first_DNSentry;
+
   do
   {
     dnsEntryToByteArray(dnsEntry, &next_dns_entry_in_the_dns_byteArray_ptr);
@@ -263,16 +264,62 @@ void process_LIST_RQ_msg(int sock, struct _DNSTable *dnsTable)
   char *msg;
   int dns_table_size;
   int msg_size = sizeof(short);
-  
+  int n = 0;
+
 
   dns_table_as_byteArray = dnsTableToByteArray(dnsTable, &dns_table_size);
   
   msg_size += dns_table_size;
+
+  msg = malloc(msg_size+1);
+
+  memset(msg,'\0',sizeof(msg_size));
+  stshort(MSG_LIST,msg);
+
+  memcpy(msg + sizeof(short), dns_table_as_byteArray, dns_table_size);
+
+  n = send(sock, msg, msg_size,0);
+  if (n < 0) {
+    perror("ERROR writing to socket");
+    exit(1);
+  }  
+}
+
+
+
+void process_HELLO_RQ_msg(int sock){
+
   
-  msg = malloc(msg_size);
-  //TODO: set the operation code and the table data
-  //TODO: send the message
+  char* message = "Hello World";
+  short offset = sizeof(short);
+  char buffer[MAX_BUFF_SIZE]; //FIXME declare smaller buffer
+  int n = 0;
+
+  //Set buffer to 0 and add MSG_HELLO
+  memset(buffer,'\0',sizeof(buffer));
+  stshort(MSG_HELLO,buffer);
+
+  //Insert message into buffer 
+  memcpy(buffer + offset , message,strlen(message));
+  offset += strlen(message) + SPACE_BYTE_SIZE;
+
+  //Send message code, the message and 0 at the end
+  n = send(sock, buffer, offset ,0);
+  if (n < 0) {
+    perror("ERROR writing to socket");
+    exit(1);
+  }
+
+}
+
+void process_DOMAIN_RQ_msg(int sock){
+
+ //TODO this function
+
   
+
+
+
 }
 
 /** 
@@ -283,33 +330,15 @@ void process_LIST_RQ_msg(int sock, struct _DNSTable *dnsTable)
  * connection whith the client has to be closed. 0 if the user is still 
  * interacting with the client application.
  */
-
-void sendMessage(int offset, int sock, char *buffer, int n,char* message){
-
-  offset = sizeof(unsigned short);
-  
-  memcpy(buffer + offset , message,strlen(message));
-  offset += strlen(message) + 1;
-
-  n = send(sock, buffer, offset ,0);
-  if (n < 0) {
-    perror("ERROR writing to socket");
-    exit(1);
-  }
-
-}
-
-
 int process_msg(int sock, struct _DNSTable *dnsTable)
 {
   unsigned short op_code;
   char buffer[MAX_BUFF_SIZE];
   int done = 0;
   int n = 0;
-  int offset = 0;
-  char * message;
+  
 
-  memset(buffer,'0',sizeof(buffer));  
+  memset(buffer,'\0',sizeof(buffer));  
   n = recv(sock,buffer,sizeof(buffer),0);
   
   if (n < 0) {
@@ -317,19 +346,23 @@ int process_msg(int sock, struct _DNSTable *dnsTable)
     exit(1);
   }
 
-  memcpy(&op_code, buffer, sizeof(unsigned short));
+  //Transform op_code into short again
+  memcpy(&op_code, buffer, sizeof(short));
   op_code = ntohs(op_code);
   
 
   switch(op_code)
   {
     case MSG_HELLO_RQ:
-      message = "Hello World";
-      sendMessage(offset, sock, buffer, n, message);
+      process_HELLO_RQ_msg(sock);
       break;  
 
     case MSG_LIST_RQ:
       process_LIST_RQ_msg(sock, dnsTable);
+      break;
+
+    case MSG_DOMAIN_RQ:
+      process_DOMAIN_RQ_msg(sock);
       break;                 
     case MSG_FINISH:
       //TODO
@@ -366,7 +399,7 @@ int main (int argc, char * argv[])
   }
   
   //Initialize socket structure
-  memset(&serv_addr,'0',sizeof(serv_addr));  
+  memset(&serv_addr,'\0',sizeof(serv_addr));  
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_addr.s_addr = INADDR_ANY;
   serv_addr.sin_port = htons(port);
@@ -396,5 +429,3 @@ int main (int argc, char * argv[])
   
   return 0;
 }
-
-

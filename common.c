@@ -91,7 +91,7 @@ void sendOpCodeMSG(int sock, short op_code)
 {
 
     int n=0;
-    char buffer[2];
+    char buffer[sizeof(short)];
     stshort(op_code, buffer);
 
     n = send(sock, buffer, sizeof(buffer),0);

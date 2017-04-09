@@ -54,7 +54,6 @@ int setaddrbyname(struct sockaddr_in *addr, char *host)
 int getProgramOptions(int argc, char* argv[], char *host, int *_port)
 {
   int param;
-  int port;
   *_port = DEFAULT_PORT;
 
   // We process the application execution parameters.
@@ -67,8 +66,7 @@ int getProgramOptions(int argc, char* argv[], char *host, int *_port)
 				// Donat que hem inicialitzat amb valor DEFAULT_PORT (veure common.h) 
 				// la variable port, aquest codi nomes canvia el valor de port en cas
 				// que haguem especificat un port diferent amb la opcio -p
-				port = atoi(optarg);
-				*_port = port;
+				*_port = atoi(optarg);
 				break;				
 			default:
 				printf("Parametre %c desconegut\n\n", (char) param);
@@ -106,22 +104,30 @@ void printa_menu()
 void process_list_operation(int s)
 {
   char buffer[DNS_TABLE_MAX_SIZE];
-  int msg_size;
+  int msg_size = 0;
+  int n = 0;
 
-  //TODO: uncomment sendOpCodeMSG(s, MSG_LIST_RQ); //remember to implement sendOpCode in common.c
+  sendOpCodeMSG(s, MSG_LIST_RQ);
   memset(buffer, '\0', sizeof(buffer));
-  //TODO: rebre missatge LIST
-  //TODO: Descomentar la següent línia
-  //printDNSTableFromAnArrayOfBytes(buffer+sizeof(short), msg_size-sizeof(short));
+  
+  n = recv(s,buffer,sizeof(buffer),0);
+  if (n < 0) {
+		perror("ERROR reading from socket");
+		exit(1);
+	}
+
+	msg_size = n;
+  printDNSTableFromAnArrayOfBytes(buffer+sizeof(short), msg_size-sizeof(short));
 }
 
 
-void communicate(int op_code, int s, int n){
+void process_hello_operation(int s){
 
+
+	int n = 0;
 	char buffer[MAX_BUFF_SIZE];
-	op_code = 01;
 
-  sendOpCodeMSG(s,op_code);
+  sendOpCodeMSG(s,MSG_HELLO_RQ);
 
  	n = recv(s,buffer,sizeof(buffer),0);
 	if (n < 0) {
@@ -129,6 +135,20 @@ void communicate(int op_code, int s, int n){
   	exit(1);
 	}
 
+}
+
+void process_checkDomain_operation(int s){ //TODO this function send the message with proper format
+
+	int n = 0;
+	char buffer[MAX_BUFF_SIZE];
+
+	sendOpCodeMSG(s, MSG_DOMAIN_RQ);
+
+	n = recv(s,buffer,sizeof(buffer),0);
+	if (n < 0) {
+  	perror("ERROR reading from socket");
+  	exit(1);
+	}
 }
 
 /** 
@@ -139,23 +159,25 @@ void communicate(int op_code, int s, int n){
  */
 void process_menu_option(int s, int option)
 {		  
-	short op_code = 0;
-	int n = 0;
-
-
   switch(option){
     // Opció HELLO
     case MENU_OP_HELLO:
-  		communicate(op_code,s,n);		
+  		process_hello_operation(s);		
   		break;
 
     case MENU_OP_LIST:
       process_list_operation(s);
       break;
+
+    case MENU_OP_DOMAIN_RQ:
+    	process_checkDomain_operation(s);
+    	break;
+
     case MENU_OP_FINISH:
       //TODO:
       break;
-                
+
+  
     default:
       	printf("Invalid menu option\n");
   		}
@@ -189,7 +211,7 @@ int main(int argc, char *argv[])
   }
 
 	//Initialize socket structure
-	memset(&serv_addr,'0',sizeof(serv_addr));  
+	memset(&serv_addr,'\0',sizeof(serv_addr));  
 	serv_addr.sin_family = AF_INET;
  	serv_addr.sin_addr.s_addr = inet_addr(host);
  	serv_addr.sin_port = htons(port);
@@ -203,8 +225,8 @@ int main(int argc, char *argv[])
   do{
       printa_menu();
 		  // getting the user input.
-		  scanf("%d",&option); //FIXME if you introduce a letter it goes into infinite Loop
-		  printf("\n\n"); 
+		  scanf("%d",&option);
+		  printf("\n\n");
 		  process_menu_option(sockfd, option);
 
 	  }while(option != MENU_OP_FINISH); //end while(opcio)
