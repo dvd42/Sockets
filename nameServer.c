@@ -252,6 +252,34 @@ int getProgramOptions(int argc, char* argv[], char *dns_file, int *_port)
 }
 
 
+
+
+
+void process_HELLO_RQ_msg(int sock){
+
+  
+  char* message = "Hello World";
+  short offset = sizeof(short);
+  char buffer[MAX_BUFF_SIZE]; 
+  int n = 0;
+
+  //Set buffer to 0 and add MSG_HELLO
+  memset(buffer,'\0',sizeof(buffer));
+  stshort(MSG_HELLO,buffer);
+
+  //Insert message into buffer 
+  memcpy(buffer + offset , message,strlen(message));
+  offset += strlen(message) + SPACE_BYTE_SIZE;
+
+  //Send message code, the message and 0 at the end
+  n = send(sock, buffer, offset ,0);
+  if (n < 0) {
+    perror("ERROR writing to socket");
+    exit(1);
+  }
+
+}
+
 /**
  * Function that generates the array of bytes with the dnsTable data and 
  * sends it.
@@ -287,31 +315,6 @@ void process_LIST_RQ_msg(int sock, struct _DNSTable *dnsTable)
 
 
 
-void process_HELLO_RQ_msg(int sock){
-
-  
-  char* message = "Hello World";
-  short offset = sizeof(short);
-  char buffer[MAX_BUFF_SIZE]; //FIXME declare smaller buffer
-  int n = 0;
-
-  //Set buffer to 0 and add MSG_HELLO
-  memset(buffer,'\0',sizeof(buffer));
-  stshort(MSG_HELLO,buffer);
-
-  //Insert message into buffer 
-  memcpy(buffer + offset , message,strlen(message));
-  offset += strlen(message) + SPACE_BYTE_SIZE;
-
-  //Send message code, the message and 0 at the end
-  n = send(sock, buffer, offset ,0);
-  if (n < 0) {
-    perror("ERROR writing to socket");
-    exit(1);
-  }
-
-}
-
 void process_DOMAIN_RQ_msg(int sock){
 
  //TODO this function
@@ -339,8 +342,8 @@ int process_msg(int sock, struct _DNSTable *dnsTable)
   
 
   memset(buffer,'\0',sizeof(buffer));  
+
   n = recv(sock,buffer,sizeof(buffer),0);
-  
   if (n < 0) {
     perror("ERROR reading from socket");
     exit(1);

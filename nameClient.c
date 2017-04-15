@@ -135,6 +135,8 @@ void process_hello_operation(int s){
   	exit(1);
 	}
 
+	printf("%s\n", buffer);
+
 }
 
 void process_checkDomain_operation(int s){ //TODO this function send the message with proper format
