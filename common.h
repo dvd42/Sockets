@@ -19,9 +19,9 @@
 #include <sys/socket.h> //per la creació de sockets
 #include <arpa/inet.h> //per la funcio inet_ntoa
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define NAME_LENGTH 100
 #define SPACE_BYTE_SIZE 1

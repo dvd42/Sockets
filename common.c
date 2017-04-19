@@ -95,7 +95,6 @@ void sendOpCodeMSG(int sock, short op_code)
     stshort(op_code, buffer);
 
     n = send(sock, buffer, sizeof(buffer),0);
-
     if (n < 0) {
       perror("ERROR writing to socket");
       exit(1);

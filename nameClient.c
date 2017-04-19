@@ -105,18 +105,16 @@ void process_list_operation(int s)
 {
   char buffer[DNS_TABLE_MAX_SIZE];
   int msg_size = 0;
-  int n = 0;
-
+ 
   sendOpCodeMSG(s, MSG_LIST_RQ);
   memset(buffer, '\0', sizeof(buffer));
   
-  n = recv(s,buffer,sizeof(buffer),0);
-  if (n < 0) {
+  msg_size = recv(s,buffer,sizeof(buffer),0);
+  if (msg_size < 0) {
 		perror("ERROR reading from socket");
-		exit(1);
+		exit(6);
 	}
 
-	msg_size = n;
   printDNSTableFromAnArrayOfBytes(buffer+sizeof(short), msg_size-sizeof(short));
 }
 
@@ -132,25 +130,52 @@ void process_hello_operation(int s){
  	n = recv(s,buffer,sizeof(buffer),0);
 	if (n < 0) {
   	perror("ERROR reading from socket");
-  	exit(1);
+  	exit(6);
 	}
 
-	printf("%s\n", buffer);
+	printf("%s\n", buffer + sizeof(short));
 
 }
 
-void process_checkDomain_operation(int s){ //TODO this function send the message with proper format
+void process_checkDomain_operation(int s){ 
 
 	int n = 0;
 	char buffer[MAX_BUFF_SIZE];
+	char domain[NAME_LENGTH];
+	int offset = 0;
 
-	sendOpCodeMSG(s, MSG_DOMAIN_RQ);
+	memset(buffer, 0, sizeof(buffer));
+
+	printf("Enter the domain you want to check\n");
+	scanf("%s", domain);
+
+	stshort(MSG_DOMAIN_RQ, buffer);
+	offset = sizeof(short);
+
+	//Insert the domain we want to check into the buffer
+	memcpy(buffer + offset, domain, strlen(domain));
+	offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+	n = send(s,buffer,offset,0); 
+	if (n < 0) {
+  	perror("ERROR writing to socket");
+  	exit(7);
+	}
 
 	n = recv(s,buffer,sizeof(buffer),0);
-	if (n < 0) {
-  	perror("ERROR reading from socket");
-  	exit(1);
-	}
+  if (n < 0) {
+    perror("ERROR reading from socket");
+    exit(6);
+  } 
+
+  //If the domain exists print every Ip address associated to it
+  if(n != 4){
+	  offset = sizeof(short);
+	  while(offset < n){
+	  	printf("%s\n",inet_ntoa(*((struct in_addr*)(&ldaddr(buffer + offset)))));
+	  	offset += sizeof(struct in_addr);
+  	}
+  }	
 }
 
 /** 
@@ -196,7 +221,7 @@ int main(int argc, char *argv[])
 	int sockfd;
   
   ctrl_options = getProgramOptions(argc, argv, host, &port);
-
+              
 	// Comprovem que s'hagi introduit un host. En cas contrari, terminem l'execucio de
 	// l'aplicatiu	
 	if(ctrl_options<0){
@@ -209,7 +234,7 @@ int main(int argc, char *argv[])
    
  	if (sockfd < 0) {
     perror("ERROR opening socket");
-    exit(1);
+    exit(3);
   }
 
 	//Initialize socket structure
@@ -226,8 +251,12 @@ int main(int argc, char *argv[])
 
   do{
       printa_menu();
-		  // getting the user input.
-		  scanf("%d",&option);
+		  // getting the user input making sure its an integer.
+     	while(scanf("%d",&option) != 1){
+        printf("Please enter an integer: ");
+        while(getchar() != '\n');
+    	}
+
 		  printf("\n\n");
 		  process_menu_option(sockfd, option);
 

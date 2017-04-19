@@ -251,16 +251,11 @@ int getProgramOptions(int argc, char* argv[], char *dns_file, int *_port)
 	return 0;
 }
 
-
-
-
-
-void process_HELLO_RQ_msg(int sock){
+int process_HELLO_RQ_msg(int sock) {
 
   
   char* message = "Hello World";
-  short offset = sizeof(short);
-  char buffer[MAX_BUFF_SIZE]; 
+  char buffer[sizeof(short) + strlen(message) + SPACE_BYTE_SIZE]; 
   int n = 0;
 
   //Set buffer to 0 and add MSG_HELLO
@@ -268,16 +263,15 @@ void process_HELLO_RQ_msg(int sock){
   stshort(MSG_HELLO,buffer);
 
   //Insert message into buffer 
-  memcpy(buffer + offset , message,strlen(message));
-  offset += strlen(message) + SPACE_BYTE_SIZE;
+  memcpy(buffer + sizeof(short), message, strlen(message));
 
   //Send message code, the message and 0 at the end
-  n = send(sock, buffer, offset ,0);
+  n = send(sock, buffer, sizeof(buffer) ,0);
   if (n < 0) {
-    perror("ERROR writing to socket");
-    exit(1);
+    return -1;
   }
 
+  return 0;
 }
 
 /**
@@ -286,7 +280,7 @@ void process_HELLO_RQ_msg(int sock){
  * @param s the socket connected to the client.
  * @param dnsTable the table with all the domains
  */
-void process_LIST_RQ_msg(int sock, struct _DNSTable *dnsTable)
+int process_LIST_RQ_msg(int sock, struct _DNSTable *dnsTable)
 {
   char *dns_table_as_byteArray;
   char *msg;
@@ -299,31 +293,79 @@ void process_LIST_RQ_msg(int sock, struct _DNSTable *dnsTable)
   
   msg_size += dns_table_size;
 
-  msg = malloc(msg_size+1);
+  msg = malloc(msg_size);
 
-  memset(msg,'\0',sizeof(msg_size));
+  //Insert message code and dns_table into buffer
   stshort(MSG_LIST,msg);
-
   memcpy(msg + sizeof(short), dns_table_as_byteArray, dns_table_size);
 
   n = send(sock, msg, msg_size,0);
   if (n < 0) {
-    perror("ERROR writing to socket");
-    exit(1);
+   return -1;
   }  
+
+  return 0;
 }
 
 
 
-void process_DOMAIN_RQ_msg(int sock){
+int process_DOMAIN_RQ_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
 
- //TODO this function
+  char domain[NAME_LENGTH];
+  int n = 0;
+  char newbuffer[MAX_BUFF_SIZE];
+  struct _DNSEntry *dnsEntry;
+  struct _IP *ip_structure;
+  int offset = sizeof(short);
 
+
+  memset(newbuffer, 0, sizeof(newbuffer));
+  stshort(MSG_IP_LIST, newbuffer);
   
+  //Get the domain from the buffer
+  strcpy(domain, buffer + sizeof(short));
 
+  //Look for the domain in our dnsTable
+  dnsEntry = dnsTable->first_DNSentry;
+  
+  while(dnsEntry!= NULL){
 
+    if(strcmp(dnsEntry->domainName, domain) == 0){
 
-}
+      ip_structure = dnsEntry->first_ip;
+      while(ip_structure != NULL){
+
+        //Put every IP associated to this domain into buffer
+        memcpy(newbuffer + offset, &ip_structure->IP, sizeof(ip_structure->IP));
+        offset += sizeof(ip_structure->IP);
+        ip_structure = ip_structure->nextIP;    
+      } 
+
+      //Send the Ip list to client
+      n = send(sock,newbuffer,offset,0);
+      if (n < 0) {
+        return -1;
+      }
+
+      return 0;  
+    }
+    dnsEntry = dnsEntry->nextDNSEntry;    
+  }
+
+    //If there is no matching domain name build and send error message
+    printf("%d\n", MSG_OP_ERR);
+    stshort(MSG_OP_ERR,newbuffer); //FIXME sends 0/f instead of 0/12
+    stshort(ERR_2, newbuffer + offset);
+    offset += sizeof(short);
+
+    n = send(sock, newbuffer,offset,0);
+    if (n < 0) {
+      return -1;
+    }
+
+    return 0;
+  }
+
 
 /** 
  * Receives and process the request from a client.
@@ -340,13 +382,10 @@ int process_msg(int sock, struct _DNSTable *dnsTable)
   int done = 0;
   int n = 0;
   
-
-  memset(buffer,'\0',sizeof(buffer));  
-
+  //Receive op_code from client
   n = recv(sock,buffer,sizeof(buffer),0);
   if (n < 0) {
-    perror("ERROR reading from socket");
-    exit(1);
+    return - 1;
   }
 
   //Transform op_code into short again
@@ -365,7 +404,7 @@ int process_msg(int sock, struct _DNSTable *dnsTable)
       break;
 
     case MSG_DOMAIN_RQ:
-      process_DOMAIN_RQ_msg(sock);
+      process_DOMAIN_RQ_msg(sock, buffer,dnsTable);
       break;                 
     case MSG_FINISH:
       //TODO
@@ -378,7 +417,7 @@ int process_msg(int sock, struct _DNSTable *dnsTable)
   return done;
 }
 
-int main (int argc, char * argv[])
+int main (int argc, char* argv[])
 {
   struct _DNSTable *dnsTable;
   int port;
@@ -408,22 +447,20 @@ int main (int argc, char * argv[])
   serv_addr.sin_port = htons(port);
 
   // Bind the host address to socket
-  if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-    perror("ERROR on binding");
-    exit(1);
+  if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    return -1;
   } 
 
   //Start listening for the clients
-  listen(sockfd,5);
+  listen(sockfd,MAX_QUEUED_CON);
   socklen_t clilen = sizeof(cli_addr);
   
   while(1) {
 
     //Accept connection from client
     newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen); 
-    if (newsockfd < 0) {
-      perror("ERROR on accept");
-      exit(1);
+    if (newsockfd < 0){
+      return -1;
     }
     while(!finish)
       finish = process_msg(newsockfd, dnsTable); 
