@@ -146,7 +146,7 @@ void process_checkDomain_operation(int s){
 
 	memset(buffer, 0, sizeof(buffer));
 
-	printf("Enter the domain you want to check\n");
+	printf("Enter the domain you want to check\n\n");
 	scanf("%s", domain);
 
 	stshort(MSG_DOMAIN_RQ, buffer);
@@ -175,6 +175,9 @@ void process_checkDomain_operation(int s){
 	  	printf("%s\n",inet_ntoa(*((struct in_addr*)(&ldaddr(buffer + offset)))));
 	  	offset += sizeof(struct in_addr);
   	}
+  }
+  else{
+  	printf("ERROR %d: The domain has not been found\n", ERR_2);	 
   }	
 }
 
@@ -237,16 +240,23 @@ int main(int argc, char *argv[])
     exit(3);
   }
 
+
+
 	//Initialize socket structure
 	memset(&serv_addr,'\0',sizeof(serv_addr));  
-	serv_addr.sin_family = AF_INET;
- 	serv_addr.sin_addr.s_addr = inet_addr(host);
+	serv_addr.sin_family = AF_INET;  
+  
+  if(setaddrbyname(&serv_addr, host) == -1) {
+  	perror("ERROR setting address");
+  	exit(1);
+  }
  	serv_addr.sin_port = htons(port);
+ 	socklen_t servlen = sizeof(serv_addr);
 
  	//Connect with the server
-	if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+	if (connect(sockfd, (struct sockaddr*)&serv_addr, servlen) < 0) {
   	perror("ERROR connecting");
-  	exit(1);
+  	exit(1);	
 	}
 
   do{

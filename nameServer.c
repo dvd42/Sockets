@@ -353,7 +353,6 @@ int process_DOMAIN_RQ_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
   }
 
     //If there is no matching domain name build and send error message
-    printf("%d\n", MSG_OP_ERR);
     stshort(MSG_OP_ERR,newbuffer); //FIXME sends 0/f instead of 0/12
     stshort(ERR_2, newbuffer + offset);
     offset += sizeof(short);
@@ -465,7 +464,6 @@ int main (int argc, char* argv[])
     while(!finish)
       finish = process_msg(newsockfd, dnsTable); 
   }
- 
-  
+   
   return 0;
 }
