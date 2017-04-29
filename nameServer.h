@@ -71,4 +71,4 @@ int getDNSTableSize(struct _DNSTable* dnsTable);
  */
 int getProgramOptions(int argc, char* argv[], char *dns_file, int *_port);
 
-
+struct _DNSEntry* searchDNSentry(struct _DNSEntry* dnsEntry, char* domain);

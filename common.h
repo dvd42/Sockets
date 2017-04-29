@@ -35,8 +35,8 @@
 
 //Macros per afegir i i extreure addreces.
 //Les adreces no són un long són un in_addr_t:  typedef uint32_t in_addr_t;
-#define staddr(aval, addr) ( *((in_addr_t *)(addr))=aval )
-#define ldaddr(addr) ( *((in_addr_t *)(addr))  )
+#define staddr(aval, addr) ( *((struct in_addr *)(addr))=aval )
+#define ldaddr(addr) ( *((struct in_addr *)(addr))  )
 
 
 #define MSG_HELLO_RQ 1
@@ -55,6 +55,9 @@
 
 #define ERR_1 1
 #define ERR_2 2
+
+#define MAX_ADDR_SIZE 16
+
 
 /* structure that wraps an IP with the format uint32_t and points to the next IP
 or null if there is no more IPs*/

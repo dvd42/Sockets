@@ -181,7 +181,7 @@ void dnsEntryToByteArray(struct _DNSEntry* dnsEntry, char **next_DNSEntry_ptr)
   {    
     do    
     { 
-      staddr(pIP->IP.s_addr, *next_DNSEntry_ptr);      
+      staddr(pIP->IP, *next_DNSEntry_ptr);      
       *next_DNSEntry_ptr += sizeof(in_addr_t);
     }while((pIP = pIP->nextIP) != NULL);
   }
@@ -251,6 +251,22 @@ int getProgramOptions(int argc, char* argv[], char *dns_file, int *_port)
 	return 0;
 }
 
+struct _DNSEntry* searchDNSentry(struct _DNSEntry* dnsEntry, char* domain){
+
+  while(dnsEntry!= NULL){
+
+    if(strcmp(dnsEntry->domainName, domain) == 0){
+      return dnsEntry;
+
+    }
+     dnsEntry = dnsEntry->nextDNSEntry;  
+  }  
+
+  return NULL;
+}
+
+
+
 int process_HELLO_RQ_msg(int sock) {
 
   
@@ -308,7 +324,7 @@ int process_LIST_RQ_msg(int sock, struct _DNSTable *dnsTable)
 }
 
 
-
+//TODO find stuff to encapsulate
 int process_DOMAIN_RQ_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
 
   char domain[NAME_LENGTH];
@@ -323,37 +339,124 @@ int process_DOMAIN_RQ_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
   stshort(MSG_IP_LIST, newbuffer);
   
   //Get the domain from the buffer
-  strcpy(domain, buffer + sizeof(short));
+  strcpy(domain, buffer + offset);
 
   //Look for the domain in our dnsTable
-  dnsEntry = dnsTable->first_DNSentry;
-  
-  while(dnsEntry!= NULL){
+  dnsEntry = searchDNSentry(dnsTable->first_DNSentry, domain);
 
-    if(strcmp(dnsEntry->domainName, domain) == 0){
-
-      ip_structure = dnsEntry->first_ip;
-      while(ip_structure != NULL){
-
-        //Put every IP associated to this domain into buffer
-        memcpy(newbuffer + offset, &ip_structure->IP, sizeof(ip_structure->IP));
-        offset += sizeof(ip_structure->IP);
-        ip_structure = ip_structure->nextIP;    
-      } 
-
-      //Send the Ip list to client
-      n = send(sock,newbuffer,offset,0);
-      if (n < 0) {
-        return -1;
-      }
-
-      return 0;  
-    }
-    dnsEntry = dnsEntry->nextDNSEntry;    
-  }
+  if(dnsEntry == NULL){
 
     //If there is no matching domain name build and send error message
-    stshort(MSG_OP_ERR,newbuffer); //FIXME sends 0/f instead of 0/12
+    stshort(MSG_OP_ERR,newbuffer);
+    stshort(ERR_2, newbuffer + offset);
+    offset += sizeof(short);
+
+    n = send(sock, newbuffer,offset,0);
+    if (n < 0) {
+      return -1;
+    }
+    return 0; 
+  }
+
+  ip_structure = dnsEntry->first_ip;
+  while(ip_structure != NULL){
+
+    //Put every IP associated to this domain into buffer
+    staddr(ip_structure->IP, newbuffer + offset);
+    offset += sizeof(ip_structure->IP);
+    ip_structure = ip_structure->nextIP;    
+  } 
+    //Send the Ip list to client
+    n = send(sock,newbuffer,offset,0);
+    if (n < 0) {
+      return -1;
+    }
+
+    return 0;
+  }
+
+
+int process_ADD_DOMAIN_msg(int sock, char* buffer, struct _DNSTable *dnsTable, int n){
+
+  char domain[NAME_LENGTH];
+  struct _DNSEntry *dnsEntry;
+  struct _IP *ip_structure;
+  int offset = sizeof(short);
+  struct _IP *aux;
+  struct _DNSEntry *aux1;
+  int ips;
+
+  aux = malloc(sizeof(struct _IP));
+  
+  //Get the domain from the buffer
+  strcpy(domain, buffer + offset);
+  offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+
+  //Store how many ips have been sent by the user
+  ips = (n - offset)/sizeof(struct in_addr);
+
+  //Search for domain in out dnsTable
+  dnsEntry = searchDNSentry(dnsTable->first_DNSentry, domain);
+
+   if(dnsEntry == NULL){
+
+      aux1 = malloc(sizeof(struct _DNSEntry));
+      dnsEntry = malloc(sizeof(struct _DNSEntry));
+      
+      //Insert new dnsEntry into dnsTable
+      aux1 = dnsTable->first_DNSentry;
+      dnsTable->first_DNSentry = dnsEntry;
+      strcpy(dnsEntry->domainName,domain);
+      dnsEntry->nextDNSEntry = aux1;
+      dnsEntry->numberOfIPs = 0;
+    }  
+
+
+  for (int i = 0; i < ips; i++){
+    
+    //Get Ip from buffer  
+    ip_structure = malloc(sizeof(struct _IP));
+    ip_structure->IP = ldaddr(buffer + offset);
+    offset += sizeof(ip_structure->IP);
+
+    //Insert IP into dnsEntry
+    aux = dnsEntry->first_ip;
+    dnsEntry->first_ip = ip_structure;
+    dnsEntry->first_ip->nextIP = aux;
+    dnsEntry->numberOfIPs++;
+
+  }
+    sendOpCodeMSG(sock,MSG_OP_OK);
+
+  return 0;
+}
+
+//TODO find stuff ro encapsulate
+int process_CHANGE_DOMAIN_msg(int sock, char* buffer, struct _DNSTable* dnsTable){
+
+  char domain[NAME_LENGTH];
+  char ip1[MAX_ADDR_SIZE];
+  char ip2[MAX_ADDR_SIZE];
+  char newbuffer[sizeof(short)];
+  struct _DNSEntry *dnsEntry;
+  struct _IP *ip_structure;
+  struct _IP *ip_structure2;
+  int offset = sizeof(short);
+  int n = 0;
+
+
+  strcpy(domain, buffer + offset);
+  offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+  dnsEntry = searchDNSentry(dnsTable->first_DNSentry, domain);
+
+
+  if(dnsEntry == NULL){
+
+    //If there is no matching domain name build and send error message
+    offset = sizeof(short);
+    stshort(MSG_OP_ERR,newbuffer);
     stshort(ERR_2, newbuffer + offset);
     offset += sizeof(short);
 
@@ -364,6 +467,208 @@ int process_DOMAIN_RQ_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
 
     return 0;
   }
+
+  else{
+
+    //Get the ip that we need to replace from buffer
+    ip_structure = malloc(sizeof(struct _IP));
+    ip_structure->IP = ldaddr(buffer + offset);
+    offset += sizeof(ip_structure->IP);
+
+    ip_structure2 = dnsEntry->first_ip;
+
+    while(ip_structure2 != NULL){
+
+      strcpy(ip2,inet_ntoa(ip_structure2->IP)); //TODO insert the whole expression into strcmp
+      strcpy(ip1,inet_ntoa(ip_structure->IP));
+     
+      //If the ip we are trying to replace has been found
+      if(strcmp(ip2,ip1) == 0){
+
+        //Replace the old Ip with the new one and send message OK to client
+        ip_structure2->IP = ldaddr(buffer + offset);       
+        sendOpCodeMSG(sock,MSG_OP_OK);
+        free(ip_structure);
+        return 0;
+      }
+
+      ip_structure2 = ip_structure2->nextIP;
+    } 
+
+    //If the domain doesnt have that IP send error message
+    offset = sizeof(short);
+    stshort(MSG_OP_ERR,newbuffer);
+    stshort(ERR_1, newbuffer + offset);
+    offset += sizeof(short);
+
+    n = send(sock, newbuffer,offset,0);
+    if (n < 0) {
+      return -1;
+    }
+
+  }
+
+  return 0;
+}
+
+//TODO find stuff to encapsulate
+
+int process_DEL_IP_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
+
+  char domain[NAME_LENGTH];
+  char ip1[MAX_ADDR_SIZE];
+  char ip2[MAX_ADDR_SIZE];
+  char newbuffer[sizeof(short)];
+  struct _DNSEntry *dnsEntry;
+  struct _IP *ip_structure;
+  struct _IP *tmp;
+  struct _IP *last_ip_struct = NULL;
+  int offset = sizeof(short);
+  int n = 0;
+
+
+  strcpy(domain, buffer + offset);
+  offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+  dnsEntry = searchDNSentry(dnsTable->first_DNSentry, domain);
+
+  if(dnsEntry == NULL){
+
+    //If there is no matching domain name build and send error message
+    offset = sizeof(short);
+    stshort(MSG_OP_ERR,newbuffer);
+    stshort(ERR_2, newbuffer + offset);
+    offset += sizeof(short);
+
+    n = send(sock, newbuffer,offset,0);
+    if (n < 0) {
+      return -1;
+    }
+
+    return 0;
+  }
+
+  else{
+
+  
+    //Get the ip that we need to delete from buffer
+    tmp = malloc(sizeof(struct _IP));
+    tmp->IP = ldaddr(buffer + offset);
+    offset += sizeof(tmp->IP);
+
+    ip_structure = dnsEntry->first_ip;
+    strcpy(ip1,inet_ntoa(tmp->IP));
+
+
+    while(ip_structure != NULL){
+
+      
+      strcpy(ip2,inet_ntoa(ip_structure->IP));
+    
+      //If the ip we are trying to delete has been found
+      if(strcmp(ip2,ip1) == 0){
+
+        tmp = ip_structure;
+
+        //Delete ip and send message OK to client
+        if (last_ip_struct == NULL){
+          dnsEntry->first_ip = ip_structure->nextIP;
+          dnsEntry->numberOfIPs--;
+          free(tmp);
+        }
+
+        else{
+          last_ip_struct->nextIP = ip_structure->nextIP;
+          dnsEntry->numberOfIPs--;
+          free(tmp);
+        } 
+
+        sendOpCodeMSG(sock,MSG_OP_OK);
+        return 0;
+      }  
+
+      //Last_ip_struct points to the ip previous to the one we are looking for
+      last_ip_struct = ip_structure;
+      ip_structure = ip_structure->nextIP;
+    }
+
+    //If the domain doesnt have that IP send error message
+    offset = sizeof(short);
+    stshort(MSG_OP_ERR,newbuffer);
+    stshort(ERR_1, newbuffer + offset);
+    offset += sizeof(short);
+
+    n = send(sock, newbuffer,offset,0);
+    if (n < 0) {
+      return -1;
+    }  
+
+  }
+
+  return 0;
+}
+
+//TODO find stuff to encapsulate
+
+int process_DEL_DOMAIN_msg(int sock , char* buffer, struct _DNSTable* dnsTable){
+
+  char domain[NAME_LENGTH];
+  char newbuffer[sizeof(short)];
+  struct _DNSEntry *dnsEntry;
+  struct _DNSEntry *lastDNSEntry = NULL;
+  struct _DNSEntry *tmp;
+  int offset = sizeof(short);
+  int n = 0;
+
+  strcpy(domain, buffer + offset);
+  offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+  dnsEntry = dnsTable->first_DNSentry;
+
+  while(dnsEntry != NULL){
+
+    //Check if the domain we are looking for is in our dnsTable
+    if(strcmp(dnsEntry->domainName, domain) == 0){
+
+      tmp = dnsEntry;
+
+      //Delete the domain from out dnsTable
+      if(lastDNSEntry == NULL){
+
+        dnsTable->first_DNSentry = dnsEntry->nextDNSEntry;
+        free(tmp);
+        sendOpCodeMSG(sock, MSG_OP_OK);
+        return 0;
+
+      }
+
+      else{
+        lastDNSEntry->nextDNSEntry = dnsEntry->nextDNSEntry;
+        free(tmp);
+        sendOpCodeMSG(sock, MSG_OP_OK);
+        return 0;
+      }
+
+      //lastDnsentry points to the entry previous to the one we are looking for
+      lastDNSEntry = dnsEntry;
+      dnsEntry = dnsEntry->nextDNSEntry;
+
+    }  
+
+    //If there is no matching domain name build and send error message
+    offset = sizeof(short);
+    stshort(MSG_OP_ERR,newbuffer);
+    stshort(ERR_2, newbuffer + offset);
+    offset += sizeof(short);
+
+    n = send(sock, newbuffer,offset,0);
+    if (n < 0) {
+      return -1;
+    }
+
+  }  
+  return 0;
+} 
 
 
 /** 
@@ -388,10 +693,8 @@ int process_msg(int sock, struct _DNSTable *dnsTable)
   }
 
   //Transform op_code into short again
-  memcpy(&op_code, buffer, sizeof(short));
-  op_code = ntohs(op_code);
+  op_code = ldshort(buffer);
   
-
   switch(op_code)
   {
     case MSG_HELLO_RQ:
@@ -404,9 +707,25 @@ int process_msg(int sock, struct _DNSTable *dnsTable)
 
     case MSG_DOMAIN_RQ:
       process_DOMAIN_RQ_msg(sock, buffer,dnsTable);
-      break;                 
+      break;  
+
+    case MSG_ADD_DOMAIN:
+      process_ADD_DOMAIN_msg(sock, buffer, dnsTable,n);
+      break;
+
+    case MSG_CHANGE_DOMAIN:
+      process_CHANGE_DOMAIN_msg(sock, buffer, dnsTable);
+      break;
+
+    case MSG_DEL_IP:
+      process_DEL_IP_msg(sock,buffer,dnsTable);
+      break;
+
+    case MSG_DEL_DOMAIN:
+      process_DEL_DOMAIN_msg(sock,buffer,dnsTable); 
+      break;
+
     case MSG_FINISH:
-      //TODO
       done = 1;
       break;
     default:
@@ -425,7 +744,8 @@ int main (int argc, char* argv[])
 
   int sockfd, newsockfd;
   struct sockaddr_in serv_addr, cli_addr;
-  
+  int pid;
+
   getProgramOptions(argc, argv, dns_file, &port);
   
   dnsTable = loadDNSTableFromFile(dns_file);
@@ -461,9 +781,17 @@ int main (int argc, char* argv[])
     if (newsockfd < 0){
       return -1;
     }
-    while(!finish)
-      finish = process_msg(newsockfd, dnsTable); 
+    pid = fork();
+
+    //The child process will handle the new connection
+    if(pid == 0){      
+      while(!finish)
+        finish = process_msg(newsockfd, dnsTable); 
+      
+      close(newsockfd);
+      exit(0);
+    }
   }
-   
+
   return 0;
 }

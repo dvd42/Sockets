@@ -107,12 +107,11 @@ void process_list_operation(int s)
   int msg_size = 0;
  
   sendOpCodeMSG(s, MSG_LIST_RQ);
-  memset(buffer, '\0', sizeof(buffer));
-  
+
   msg_size = recv(s,buffer,sizeof(buffer),0);
   if (msg_size < 0) {
 		perror("ERROR reading from socket");
-		exit(6);
+		exit(4);
 	}
 
   printDNSTableFromAnArrayOfBytes(buffer+sizeof(short), msg_size-sizeof(short));
@@ -130,7 +129,7 @@ void process_hello_operation(int s){
  	n = recv(s,buffer,sizeof(buffer),0);
 	if (n < 0) {
   	perror("ERROR reading from socket");
-  	exit(6);
+  	exit(4);
 	}
 
 	printf("%s\n", buffer + sizeof(short));
@@ -143,8 +142,12 @@ void process_checkDomain_operation(int s){
 	char buffer[MAX_BUFF_SIZE];
 	char domain[NAME_LENGTH];
 	int offset = 0;
+	int op_code = 0;
+	int op_code2 = 0;
 
 	memset(buffer, 0, sizeof(buffer));
+
+	//TODO replace scanf with fgets
 
 	printf("Enter the domain you want to check\n\n");
 	scanf("%s", domain);
@@ -159,13 +162,13 @@ void process_checkDomain_operation(int s){
 	n = send(s,buffer,offset,0); 
 	if (n < 0) {
   	perror("ERROR writing to socket");
-  	exit(7);
+  	exit(5);
 	}
 
 	n = recv(s,buffer,sizeof(buffer),0);
   if (n < 0) {
     perror("ERROR reading from socket");
-    exit(6);
+    exit(4);
   } 
 
   //If the domain exists print every Ip address associated to it
@@ -177,8 +180,255 @@ void process_checkDomain_operation(int s){
   	}
   }
   else{
-  	printf("ERROR %d: The domain has not been found\n", ERR_2);	 
+  	//Extract the error codes from buffer and print it to stdout
+  	op_code = ldshort(buffer);
+  	op_code2 = ldshort(buffer + sizeof(short));
+  	printf("Code %d.%d\nThe domain has not been found\n", op_code, op_code2);	 
   }	
+}
+
+
+void process_addDomainIP_operation(int s){
+
+	char buffer[MAX_BUFF_SIZE];
+	char domain[NAME_LENGTH];
+	int offset = 0;
+	struct in_addr address;
+	int n = 0;
+	char ip[MAX_ADDR_SIZE];
+	char moreIPs = 'n';
+	int op_code;
+
+	//Insert message code into buffer
+	memset(buffer, 0, sizeof(buffer));
+	stshort(MSG_ADD_DOMAIN,buffer);
+	offset = sizeof(short);
+
+	//TODO replace scanfs with fgets
+
+	printf("Enter the domain you want to add\n");
+	scanf("%s", domain);
+	
+	//Insert the domain into buffer
+	memcpy(buffer + offset, domain, strlen(domain));
+	offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+	do{
+
+		printf("Enter the Ip you want to add\n");
+		scanf("%s", ip);
+
+		//Insert ip in network format into buffer
+		inet_aton(ip, &address);
+		staddr(address, buffer + offset);
+		offset += sizeof(address);
+
+		printf("Do you want to add more IPs to this domain (y/n)\n");
+		fflush(stdin);
+		scanf(" %c", &moreIPs);
+
+
+		while(moreIPs != 'y' && moreIPs != 'n'){ 
+			printf("Please enter 'y' or 'n'\n");
+			fflush(stdin);
+			scanf(" %c", &moreIPs);
+
+		}
+
+	
+	}while(moreIPs != 'n');
+
+
+	n = send(s,buffer,offset,0); 
+	if (n < 0) {
+  	perror("ERROR writing to socket");
+  	exit(5);
+	}
+
+	n = recv(s,buffer,sizeof(buffer),0);
+  if (n < 0) {
+    perror("ERROR reading from socket");
+    exit(4);
+  } 
+  op_code = ldshort(buffer);
+  printf("Code %d\nThe operation was completed successfully\n", op_code);
+
+}
+
+
+void process_changeDomain_operation(int s){
+
+	char buffer[MAX_BUFF_SIZE];
+	char domain[NAME_LENGTH];
+	int offset = sizeof(short);
+	struct in_addr address;
+	int n = 0;
+	char ip[MAX_ADDR_SIZE];
+	char ip2[MAX_ADDR_SIZE];
+	int op_code;
+	int op_code2;
+	
+	memset(buffer, 0, sizeof(buffer));
+	stshort(MSG_CHANGE_DOMAIN, buffer);
+
+	printf("Enter the domain you want to change\n");
+	scanf("%s", domain);
+	
+	//Insert the domain into buffer
+	memcpy(buffer + offset, domain, strlen(domain));
+	offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+	printf("Enter the IP you want to replace\n");
+	fflush(stdin);
+	scanf("%s", ip);
+
+
+	printf("Enter the new IP\n");
+	fflush(stdin);
+	scanf("%s", ip2);
+
+	//Insert both IPs into buffer in dotted quad format
+	inet_aton(ip, &address);
+	staddr(address, buffer + offset);
+	offset += sizeof(address);
+	
+	inet_aton(ip2, &address);
+	staddr(address, buffer + offset);
+	offset += sizeof(address);
+
+	n = send(s,buffer,offset,0); 
+	if (n < 0) {
+  	perror("ERROR writing to socket");
+  	exit(5);
+	}
+
+
+	n = recv(s,buffer,sizeof(buffer),0);
+  if (n < 0) {
+    perror("ERROR reading from socket");
+    exit(4);
+  } 
+
+ 	if(n == 2){
+	  op_code = ldshort(buffer);
+	  printf("Code %d\n The operation was completed successfully", op_code);
+	}
+	else{
+		op_code = ldshort(buffer);
+  	op_code2 = ldshort(buffer + sizeof(short));
+  	
+  	if(op_code2 == 2)
+  		printf("Code %d.%d\nThe domain has not been found\n", op_code, op_code2);	 
+  	else
+  		printf("Code %d.%d\nThe IP has not been found\n", op_code, op_code2);	 
+
+
+	}
+}
+
+
+void process_deleteIP_operation(int s){
+
+	char buffer[MAX_BUFF_SIZE];
+	char domain[NAME_LENGTH];
+	int offset = sizeof(short);
+	struct in_addr address;
+	int n = 0;
+	char ip[MAX_ADDR_SIZE];
+	int op_code;
+	int op_code2;
+
+
+	memset(buffer, 0, sizeof(buffer));
+	stshort(MSG_DEL_IP, buffer);
+
+	printf("Enter the domain you want to change\n");
+	scanf("%s", domain);
+	
+	//Insert the domain into buffer
+	memcpy(buffer + offset, domain, strlen(domain));
+	offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+	printf("Enter the IP you want to delete\n");
+	fflush(stdin);
+	scanf("%s", ip);
+
+	//Insert IP into buffer in dotted quad format
+	inet_aton(ip, &address);
+	staddr(address, buffer + offset);
+	offset += sizeof(address);
+
+	n = send(s,buffer,offset,0); 
+	if (n < 0) {
+  	perror("ERROR writing to socket");
+  	exit(5);
+	}
+
+	n = recv(s,buffer,sizeof(buffer),0);
+  if (n < 0) {
+    perror("ERROR reading from socket");
+    exit(4);
+  } 
+
+  if(n == 2){
+	  op_code = ldshort(buffer);
+	  printf("Code %d\n The operation was completed successfully", op_code);
+	}
+	else{
+		op_code = ldshort(buffer);
+  	op_code2 = ldshort(buffer + sizeof(short));
+  	
+  	if(op_code2 == 2)
+  		printf("Code %d.%d\nThe domain has not been found\n", op_code, op_code2);	 
+  	else
+  		printf("Code %d.%d\nThe IP has not been found\n", op_code, op_code2);	 
+	}
+
+}
+
+void process_deleteDomain_operation(int s){
+
+
+	char buffer[MAX_BUFF_SIZE];
+	char domain[NAME_LENGTH];
+	int offset = sizeof(short);
+	int n = 0;
+	int op_code;
+	int op_code2;
+
+	memset(buffer, 0, sizeof(buffer));
+	stshort(MSG_DEL_DOMAIN, buffer);
+
+	printf("Enter the domain you want to delete\n");
+	scanf("%s", domain);
+	
+	//Insert the domain into buffer
+	memcpy(buffer + offset, domain, strlen(domain));
+	offset += strlen(domain) + SPACE_BYTE_SIZE;
+
+	n = send(s,buffer,offset,0); 
+	if (n < 0) {
+  	perror("ERROR writing to socket");
+  	exit(5);
+	}
+
+	n = recv(s,buffer,sizeof(buffer),0);
+  if (n < 0) {
+    perror("ERROR reading from socket");
+    exit(4);
+  } 
+
+  if(n == 2){
+	  op_code = ldshort(buffer);
+	  printf("Code %d\n The operation was completed successfully", op_code);
+	}
+	else{
+		op_code = ldshort(buffer);
+  	op_code2 = ldshort(buffer + sizeof(short));
+		printf("Code %d.%d\nThe domain has not been found\n", op_code, op_code2);	 
+
+	}
+
 }
 
 /** 
@@ -202,9 +452,28 @@ void process_menu_option(int s, int option)
     case MENU_OP_DOMAIN_RQ:
     	process_checkDomain_operation(s);
     	break;
+    case MENU_OP_ADD_DOMAIN_IP:
+    	process_addDomainIP_operation(s);
+    	break;
+
+    case MENU_OP_ADD_DOMAIN_IPS:
+    	process_addDomainIP_operation(s);
+    	break;
+
+    case MENU_OP_CHANGE:
+    	process_changeDomain_operation(s);
+    	break;
+
+    case MENU_OP_DELETE_IP:
+    	process_deleteIP_operation(s);
+    	break;
+
+    case MENU_OP_DELETE_DOMAIN:
+    	process_deleteDomain_operation(s);	
+    	break;
 
     case MENU_OP_FINISH:
-      //TODO:
+    	sendOpCodeMSG(s,MSG_FINISH);
       break;
 
   
@@ -237,26 +506,24 @@ int main(int argc, char *argv[])
    
  	if (sockfd < 0) {
     perror("ERROR opening socket");
-    exit(3);
+    exit(1);
   }
-
-
 
 	//Initialize socket structure
 	memset(&serv_addr,'\0',sizeof(serv_addr));  
 	serv_addr.sin_family = AF_INET;  
-  
-  if(setaddrbyname(&serv_addr, host) == -1) {
-  	perror("ERROR setting address");
-  	exit(1);
-  }
  	serv_addr.sin_port = htons(port);
+ 	if(setaddrbyname(&serv_addr, host) == -1) {
+  	perror("ERROR setting address");
+  	exit(2);
+  }
+
  	socklen_t servlen = sizeof(serv_addr);
 
  	//Connect with the server
 	if (connect(sockfd, (struct sockaddr*)&serv_addr, servlen) < 0) {
   	perror("ERROR connecting");
-  	exit(1);	
+  	exit(3);	
 	}
 
   do{

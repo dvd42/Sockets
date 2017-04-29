@@ -26,6 +26,7 @@
 
 #define DNS_TABLE_MAX_SIZE 2000
 #define MAX_HOST_SIZE 50
+#define MAX_ADDR_SIZE 16
 
 
 /**

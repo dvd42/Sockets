@@ -27,7 +27,6 @@ void printDNSTableFromAnArrayOfBytes(char *dns_table, int table_size)
   int i = 0;
   char* dns_table_ptr = dns_table;
   int numberOfIps;
-  struct in_addr address;
   
   while (offset < table_size)
   {
@@ -41,8 +40,7 @@ void printDNSTableFromAnArrayOfBytes(char *dns_table, int table_size)
     //printing ips
     for(i=0; i< numberOfIps; i++)
     {
-       address.s_addr = ldaddr(dns_table_ptr);
-       printf("%s ", inet_ntoa(address));
+       printf("%s ", inet_ntoa(ldaddr(dns_table_ptr)));
        offset += sizeof(in_addr_t);
        dns_table_ptr = dns_table + offset;
     }
@@ -97,7 +95,7 @@ void sendOpCodeMSG(int sock, short op_code)
     n = send(sock, buffer, sizeof(buffer),0);
     if (n < 0) {
       perror("ERROR writing to socket");
-      exit(1);
+      exit(1); //TODO insert return
     }        
 
 }
