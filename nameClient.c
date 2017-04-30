@@ -174,8 +174,10 @@ void process_checkDomain_operation(int s){
   //If the domain exists print every Ip address associated to it
   if(n != 4){
 	  offset = sizeof(short);
+	  struct in_addr ip;
 	  while(offset < n){
-	  	printf("%s\n",inet_ntoa(*((struct in_addr*)(&ldaddr(buffer + offset)))));
+	  	ip = ldaddr(buffer + offset);
+	  	printf("%s\n",inet_ntoa(ip));
 	  	offset += sizeof(struct in_addr);
   	}
   }

@@ -412,8 +412,9 @@ int process_ADD_DOMAIN_msg(int sock, char* buffer, struct _DNSTable *dnsTable, i
       dnsEntry->numberOfIPs = 0;
     }  
 
+  int i;
 
-  for (int i = 0; i < ips; i++){
+  for (i = 0; i < ips; i++){
     
     //Get Ip from buffer  
     ip_structure = malloc(sizeof(struct _IP));
@@ -464,8 +465,6 @@ int process_CHANGE_DOMAIN_msg(int sock, char* buffer, struct _DNSTable* dnsTable
     if (n < 0) {
       return -1;
     }
-
-    return 0;
   }
 
   else{
@@ -649,11 +648,12 @@ int process_DEL_DOMAIN_msg(int sock , char* buffer, struct _DNSTable* dnsTable){
         return 0;
       }
 
-      //lastDnsentry points to the entry previous to the one we are looking for
-      lastDNSEntry = dnsEntry;
-      dnsEntry = dnsEntry->nextDNSEntry;
+    } 
 
-    }  
+    //lastDnsentry points to the entry previous to the one we are looking for
+    lastDNSEntry = dnsEntry;
+    dnsEntry = dnsEntry->nextDNSEntry;
+  }   
 
     //If there is no matching domain name build and send error message
     offset = sizeof(short);
@@ -665,8 +665,7 @@ int process_DEL_DOMAIN_msg(int sock , char* buffer, struct _DNSTable* dnsTable){
     if (n < 0) {
       return -1;
     }
-
-  }  
+      
   return 0;
 } 
 
@@ -787,7 +786,7 @@ int main (int argc, char* argv[])
     if(pid == 0){      
       while(!finish)
         finish = process_msg(newsockfd, dnsTable); 
-      
+
       close(newsockfd);
       exit(0);
     }
