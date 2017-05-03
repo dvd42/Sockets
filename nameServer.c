@@ -437,8 +437,6 @@ int process_ADD_DOMAIN_msg(int sock, char* buffer, struct _DNSTable *dnsTable, i
 int process_CHANGE_DOMAIN_msg(int sock, char* buffer, struct _DNSTable* dnsTable){
 
   char domain[NAME_LENGTH];
-  char ip1[MAX_ADDR_SIZE];
-  char ip2[MAX_ADDR_SIZE];
   char newbuffer[sizeof(short)];
   struct _DNSEntry *dnsEntry;
   struct _IP *ip_structure;
@@ -478,11 +476,9 @@ int process_CHANGE_DOMAIN_msg(int sock, char* buffer, struct _DNSTable* dnsTable
 
     while(ip_structure2 != NULL){
 
-      strcpy(ip2,inet_ntoa(ip_structure2->IP)); //TODO insert the whole expression into strcmp
-      strcpy(ip1,inet_ntoa(ip_structure->IP));
      
       //If the ip we are trying to replace has been found
-      if(strcmp(ip2,ip1) == 0){
+      if(ip_structure2->IP.s_addr == ip_structure->IP.s_addr){
 
         //Replace the old Ip with the new one and send message OK to client
         ip_structure2->IP = ldaddr(buffer + offset);       
@@ -515,8 +511,6 @@ int process_CHANGE_DOMAIN_msg(int sock, char* buffer, struct _DNSTable* dnsTable
 int process_DEL_IP_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
 
   char domain[NAME_LENGTH];
-  char ip1[MAX_ADDR_SIZE];
-  char ip2[MAX_ADDR_SIZE];
   char newbuffer[sizeof(short)];
   struct _DNSEntry *dnsEntry;
   struct _IP *ip_structure;
@@ -556,16 +550,11 @@ int process_DEL_IP_msg(int sock,char* buffer,struct _DNSTable *dnsTable){
     offset += sizeof(tmp->IP);
 
     ip_structure = dnsEntry->first_ip;
-    strcpy(ip1,inet_ntoa(tmp->IP));
-
 
     while(ip_structure != NULL){
 
-      
-      strcpy(ip2,inet_ntoa(ip_structure->IP));
-    
       //If the ip we are trying to delete has been found
-      if(strcmp(ip2,ip1) == 0){
+      if(tmp->IP.s_addr == ip_structure->IP.s_addr){
 
         tmp = ip_structure;
 
@@ -665,7 +654,7 @@ int process_DEL_DOMAIN_msg(int sock , char* buffer, struct _DNSTable* dnsTable){
     if (n < 0) {
       return -1;
     }
-      
+
   return 0;
 } 
 
